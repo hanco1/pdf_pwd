@@ -56,4 +56,4 @@ Built with Flask and pypdf. Files never leave your machine.
 - 解锁后的文件会写入 `output/` 并提供下载。
 - 最大上传 50 MB（可在 `app.py` 中调整 `MAX_MB`）。
 
-[https://app.eraser.io/workspace/cn6mFs3Fi24HqiqFIpNi?origin=share](https://app.eraser.io/workspace/cn6mFs3Fi24HqiqFIpNi?elements=PbNAHCc5q5Oh9vldV2E-yQ)
+<img width="5384" height="2472" alt="image" src="https://github.com/user-attachments/assets/87af5952-1fb5-4370-8d0e-0ecb9aaafe43" />
