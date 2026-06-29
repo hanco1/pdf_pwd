@@ -23,3 +23,7 @@ output/
 .DS_Store
 Thumbs.db
 
+# Local test fixtures (test_*.py suites stay tracked)
+make_test_pdfs.py
+test_*.pdf
+

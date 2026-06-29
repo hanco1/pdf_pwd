@@ -1,7 +1,7 @@
 import io
 import os
 
-from flask import Flask, render_template_string, request, send_file
+from flask import Flask, jsonify, render_template_string, request, send_file
 from pypdf import PdfReader, PdfWriter
 from pypdf.errors import EmptyFileError, PdfReadError, PdfStreamError
 from werkzeug.exceptions import RequestEntityTooLarge
@@ -652,7 +652,7 @@ TEMPLATE = """\
                 </div>
               </div>
 
-              <div class="field" id="mode-panel">
+              <div class="field" id="mode-panel" role="tabpanel" aria-label="Selected PDF mode">
                 <label for="password" id="password-label">PDF password</label>
                 <div class="password-shell">
                   <input class="password-input" id="password" name="password" type="password" placeholder="Enter the current PDF password" autocomplete="current-password" aria-describedby="password-helper mismatch-message" />
@@ -1105,8 +1105,15 @@ def pdf_buffer_from_writer(writer):
     return output
 
 
+def unlocked_pdf_buffer(reader):
+    return pdf_buffer_from_writer(writer_from_reader(reader))
+
+
 def encrypted_pdf_buffer(reader, password):
     writer = writer_from_reader(reader)
+    # AES-256 needs the `cryptography` package (installed via pypdf[crypto]).
+    # Never silently fall back to weak RC4 — surface the error instead so we
+    # never hand back something weaker than what was promised.
     try:
         writer.encrypt(
             user_password=password,
@@ -1114,10 +1121,111 @@ def encrypted_pdf_buffer(reader, password):
             algorithm="AES-256",
         )
     except Exception:
-        app.logger.debug("Falling back to default PDF encryption algorithm.")
-        writer = writer_from_reader(reader)
-        writer.encrypt(user_password=password, owner_password=password)
+        app.logger.exception("AES-256 encryption unavailable; refusing to weaken encryption.")
+        raise
     return pdf_buffer_from_writer(writer)
+
+
+def api_error(message, code, status):
+    return jsonify(error=message, code=code), status
+
+
+def is_api_path():
+    return request.path == "/api" or request.path.startswith("/api/")
+
+
+def empty_api_response():
+    return "", 204
+
+
+def api_file_too_large_message():
+    return f"File too large. The hosted version accepts a max {MAX_MB} MB PDF."
+
+
+def uploaded_api_file():
+    upload = request.files.get("file") or request.files.get("pdf")
+    if not upload or upload.filename == "":
+        return None, api_error("Choose a PDF file.", "no_file", 400)
+    return upload, None
+
+
+def base_name_from_upload(upload):
+    original_name = secure_filename(upload.filename)
+    base_name = os.path.splitext(original_name)[0] if original_name else ""
+    return secure_filename(base_name) or "document"
+
+
+def reader_from_upload(upload):
+    try:
+        data = upload.read()
+        if not data:
+            return None, api_error("Choose a PDF file.", "no_file", 400)
+        return PdfReader(io.BytesIO(data)), None
+    except (EmptyFileError, PdfReadError, PdfStreamError):
+        return None, api_error("That file does not appear to be a valid PDF.", "invalid_pdf", 400)
+    except Exception:
+        return None, api_error("That file does not appear to be a valid PDF.", "invalid_pdf", 400)
+
+
+def api_description():
+    return {
+        "name": "PDF Unlocker API",
+        "version": "v1",
+        "size_limit": f"{MAX_MB} MB on the hosted version",
+        "endpoints": {
+            "/api/v1/unlock": {
+                "method": "POST",
+                "content_type": "multipart/form-data",
+                "params": {
+                    "file": "PDF upload field. You may also use the field name pdf.",
+                    "password": "Optional. Use the known password when the PDF is encrypted.",
+                },
+                "success": "Binary application/pdf response named {base}_unlocked.pdf.",
+                "errors": ["no_file", "invalid_pdf", "wrong_password", "file_too_large", "internal_error"],
+            },
+            "/api/v1/lock": {
+                "method": "POST",
+                "content_type": "multipart/form-data",
+                "params": {
+                    "file": "PDF upload field. You may also use the field name pdf.",
+                    "password": "Required. AES-256 password for the protected PDF.",
+                },
+                "success": "Binary application/pdf response named {base}_protected.pdf.",
+                "errors": [
+                    "no_file",
+                    "invalid_pdf",
+                    "password_required",
+                    "already_encrypted",
+                    "file_too_large",
+                    "internal_error",
+                ],
+            },
+        },
+        "examples": {
+            "unlock": 'curl -X POST https://pdf-pwd.myboringtools.top/api/v1/unlock -F "file=@locked.pdf" -F "password=secret" -o unlocked.pdf',
+            "lock": 'curl -X POST https://pdf-pwd.myboringtools.top/api/v1/lock -F "file=@doc.pdf" -F "password=newsecret" -o protected.pdf',
+            "python": (
+                "import requests\n"
+                "with open('locked.pdf', 'rb') as pdf:\n"
+                "    response = requests.post(\n"
+                "        'https://pdf-pwd.myboringtools.top/api/v1/unlock',\n"
+                "        files={'file': pdf},\n"
+                "        data={'password': 'secret'},\n"
+                "    )\n"
+                "response.raise_for_status()\n"
+                "open('unlocked.pdf', 'wb').write(response.content)"
+            ),
+        },
+    }
+
+
+@app.after_request
+def add_api_cors_headers(response):
+    if is_api_path():
+        response.headers["Access-Control-Allow-Origin"] = "*"
+        response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
+        response.headers["Access-Control-Allow-Headers"] = "Content-Type"
+    return response
 
 
 @app.route("/", methods=["GET"])
@@ -1127,13 +1235,94 @@ def index():
 
 @app.errorhandler(RequestEntityTooLarge)
 def handle_file_too_large(error):
-    return (
-        render_page(
-            "error",
-            f"That PDF is larger than the {MAX_MB} MB limit for the hosted version. Run it locally for bigger files.",
-        ),
-        413,
-    )
+    if request.path.startswith("/api/"):
+        return api_error(api_file_too_large_message(), "file_too_large", 413)
+    if IS_HOSTED:
+        msg = f"That PDF is larger than the {MAX_MB} MB limit for the hosted version. Run it locally for bigger files."
+    else:
+        msg = f"That PDF is larger than the current {MAX_MB} MB limit. Raise it with the MAX_MB environment variable."
+    return render_page("error", msg), 413
+
+
+@app.route("/api", methods=["GET", "OPTIONS"])
+@app.route("/api/v1", methods=["GET", "OPTIONS"])
+def api_index():
+    if request.method == "OPTIONS":
+        return empty_api_response()
+    return jsonify(api_description())
+
+
+@app.route("/api/v1/unlock", methods=["POST", "OPTIONS"])
+def api_unlock():
+    if request.method == "OPTIONS":
+        return empty_api_response()
+
+    upload, error = uploaded_api_file()
+    if error:
+        return error
+
+    reader, error = reader_from_upload(upload)
+    if error:
+        return error
+
+    password = request.form.get("password", "")
+    base_name = base_name_from_upload(upload)
+
+    try:
+        if reader.is_encrypted and reader.decrypt(password or "") == 0:
+            return api_error("That password did not unlock this PDF.", "wrong_password", 400)
+
+        return send_file(
+            unlocked_pdf_buffer(reader),
+            mimetype="application/pdf",
+            as_attachment=True,
+            download_name=f"{base_name}_unlocked.pdf",
+        )
+    except PdfReadError:
+        return api_error("That file does not appear to be a valid PDF.", "invalid_pdf", 400)
+    except Exception:
+        app.logger.exception("Something went wrong while processing the PDF API unlock request.")
+        return api_error("Something went wrong while processing the PDF.", "internal_error", 500)
+
+
+@app.route("/api/v1/lock", methods=["POST", "OPTIONS"])
+def api_lock():
+    if request.method == "OPTIONS":
+        return empty_api_response()
+
+    upload, error = uploaded_api_file()
+    if error:
+        return error
+
+    password = request.form.get("password", "")
+    if not password:
+        return api_error("Enter a password to protect the PDF.", "password_required", 400)
+
+    reader, error = reader_from_upload(upload)
+    if error:
+        return error
+
+    base_name = base_name_from_upload(upload)
+
+    try:
+        if reader.is_encrypted and reader.decrypt("") == 0:
+            return api_error(
+                "This PDF is already password-protected. Unlock it first.",
+                "already_encrypted",
+                400,
+            )
+
+        return send_file(
+            encrypted_pdf_buffer(reader, password),
+            mimetype="application/pdf",
+            as_attachment=True,
+            download_name=f"{base_name}_protected.pdf",
+        )
+    except PdfReadError:
+        return api_error("That file does not appear to be a valid PDF.", "invalid_pdf", 400)
+    except Exception:
+        app.logger.exception("Something went wrong while processing the PDF API lock request.")
+        return api_error("Something went wrong while processing the PDF.", "internal_error", 500)
 
 
 @app.route("/process", methods=["POST"])
@@ -1146,6 +1335,10 @@ def process():
     password = request.form.get("password", "")
     if mode == "lock" and not password:
         return render_page("error", "Enter a password to protect the PDF.", mode), 400
+    if mode == "lock":
+        confirm = request.form.get("confirm_password")
+        if confirm is not None and confirm != password:
+            return render_page("error", "The two passwords do not match.", mode), 400
 
     original_name = secure_filename(upload.filename)
     base_name = os.path.splitext(original_name)[0] if original_name else ""
@@ -1182,7 +1375,7 @@ def process():
         if reader.is_encrypted and reader.decrypt(password or "") == 0:
             return render_page("error", "That password did not unlock this PDF.", mode), 400
 
-        output = pdf_buffer_from_writer(writer_from_reader(reader))
+        output = unlocked_pdf_buffer(reader)
         return send_file(
             output,
             mimetype="application/pdf",
