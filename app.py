@@ -8,6 +8,9 @@ from werkzeug.exceptions import RequestEntityTooLarge
 from werkzeug.utils import secure_filename
 
 MAX_MB = int(os.environ.get("MAX_MB", "4"))
+# Vercel sets VERCEL=1 on its serverless runtime. Use it so the UI copy can
+# describe the hosted reality (in-memory, nothing stored) vs. a local run.
+IS_HOSTED = bool(os.environ.get("VERCEL"))
 
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = MAX_MB * 1024 * 1024
@@ -385,6 +388,7 @@ TEMPLATE = """\
         display: flex;
         gap: 12px;
         flex-wrap: wrap;
+        margin-top: 6px;
       }
 
       .btn {
@@ -556,7 +560,7 @@ TEMPLATE = """\
     <div class="page">
       <header>
         <div class="header-top">
-          <div class="badge" data-i18n="badge">Local or hosted</div>
+          <div class="badge" data-i18n="badge">{{ "Online · in-memory" if is_hosted else "Local · private" }}</div>
           <div class="language-switcher" aria-label="Language">
             <button class="lang-button" type="button" data-lang="en" aria-pressed="true">EN</button>
             <button class="lang-button" type="button" data-lang="zh" aria-pressed="false">中文</button>
@@ -634,7 +638,7 @@ TEMPLATE = """\
                 <button class="btn primary" id="process-btn" type="submit" disabled><span id="process-label">Unlock PDF</span></button>
                 <button class="btn secondary" type="button" id="reset-btn" data-i18n="clear">Clear</button>
               </div>
-              <p class="note" id="limit-note" data-i18n="limitNote">Hosted uploads are limited to {{ max_mb }} MB. Run it locally for bigger files. Only process PDFs you own or have rights to edit.</p>
+              <p class="note" id="limit-note" data-i18n="limitNote">{% if is_hosted %}Processed in memory and never stored. Up to {{ max_mb }} MB per file — run it locally for bigger ones. Only process PDFs you own or have rights to edit.{% else %}Files stay on your computer and are never uploaded. Only process PDFs you own or have rights to edit.{% endif %}</p>
             </form>
           </div>
         </div>
@@ -647,7 +651,7 @@ TEMPLATE = """\
         {% endif %}
       </section>
 
-      <footer data-i18n="footer">Built with pypdf. Runs locally, or hosted on Vercel - the hosted version processes your PDF in memory and stores nothing.</footer>
+      <footer data-i18n="footer">{% if is_hosted %}Hosted on Vercel · your PDF is processed in memory and never stored. Open source — run it locally to keep files fully offline.{% else %}Running locally · your PDFs never leave this computer. Built with Flask + pypdf.{% endif %}</footer>
     </div>
     <script>
       const fileInput = document.getElementById("pdf");
@@ -677,10 +681,11 @@ TEMPLATE = """\
       let currentLang = "en";
       let loadingTimer = null;
 
+      const IS_HOSTED = {{ 'true' if is_hosted else 'false' }};
       const copy = {
         en: {
           static: {
-            badge: "Local or hosted",
+            badge: IS_HOSTED ? "Online · in-memory" : "Local · private",
             intro: "Remove a known PDF password, or add a new one, without storing files on disk.",
             howTitle: "How it works",
             modeUnlock: "🔓 Remove password",
@@ -690,8 +695,12 @@ TEMPLATE = """\
             noFile: "No file selected",
             clearFile: "Clear file",
             clear: "Clear",
-            limitNote: `Hosted uploads are limited to ${maxMb} MB. Run it locally for bigger files. Only process PDFs you own or have rights to edit.`,
-            footer: "Built with pypdf. Runs locally, or hosted on Vercel - the hosted version processes your PDF in memory and stores nothing.",
+            limitNote: IS_HOSTED
+              ? `Processed in memory and never stored. Up to ${maxMb} MB per file — run it locally for bigger ones. Only process PDFs you own or have rights to edit.`
+              : "Files stay on your computer and are never uploaded. Only process PDFs you own or have rights to edit.",
+            footer: IS_HOSTED
+              ? "Hosted on Vercel · your PDF is processed in memory and never stored. Open source — run it locally to keep files fully offline."
+              : "Running locally · your PDFs never leave this computer. Built with Flask + pypdf.",
             showPassword: "Show password",
             hidePassword: "Hide password",
             mismatch: "Passwords do not match.",
@@ -729,7 +738,7 @@ TEMPLATE = """\
         },
         zh: {
           static: {
-            badge: "本地或托管",
+            badge: IS_HOSTED ? "在线 · 内存处理" : "本地 · 私密",
             intro: "移除已知 PDF 密码，或添加新密码；文件不会写入磁盘。",
             howTitle: "工作方式",
             modeUnlock: "🔓 移除密码",
@@ -739,8 +748,12 @@ TEMPLATE = """\
             noFile: "未选择文件",
             clearFile: "清除文件",
             clear: "清空",
-            limitNote: `托管上传限制为 ${maxMb} MB。更大的文件请本地运行。仅处理你拥有或有权编辑的 PDF。`,
-            footer: "可本地运行，也可部署在 Vercel - 托管版本只在内存中处理 PDF，不会存储文件。",
+            limitNote: IS_HOSTED
+              ? `在内存中处理，不会存储。单个文件最大 ${maxMb} MB，更大的文件请本地运行。仅处理你拥有或有权编辑的 PDF。`
+              : "文件保留在你的电脑上，不会上传。仅处理你拥有或有权编辑的 PDF。",
+            footer: IS_HOSTED
+              ? "托管在 Vercel · 你的 PDF 仅在内存中处理，不会存储。开源项目 —— 想完全离线可在本地运行。"
+              : "本地运行 · 你的 PDF 不会离开这台电脑。基于 Flask + pypdf 构建。",
             showPassword: "显示密码",
             hidePassword: "隐藏密码",
             mismatch: "两次输入的密码不一致。",
@@ -1016,6 +1029,7 @@ def render_page(status=None, message=None, mode="unlock"):
         message=message,
         max_mb=MAX_MB,
         initial_mode=mode,
+        is_hosted=IS_HOSTED,
     )
 
 
