@@ -3,8 +3,8 @@
 </p>
 
 <p align="center">
-  Remove a known password from a PDF so you can edit it — local-first, or one click on the web.<br>
-  用已知密码解锁 PDF，方便编辑 —— 本地优先，也可一键在线使用。
+  Remove a known password from a PDF — or add one to protect it. Local-first, or one click on the web.<br>
+  移除已知 PDF 密码，或反过来给 PDF 加密码保护。本地优先，也可一键在线使用。
 </p>
 
 <p align="center">
@@ -41,7 +41,9 @@ The app is local-first. When you run it yourself, files stay on your machine. Th
 
 ### ✨ Features
 
-- In-memory, single-request unlock flow with no files stored by the app.
+- **Two modes:** remove a known password, or add a new one (AES-256) to protect a PDF — switch with a tab.
+- In-memory, single-request flow with no files stored by the app.
+- Bilingual UI (English / 中文), show/hide password, drag-and-drop upload, confirm-password check.
 - Preserves form fields, outlines, and metadata where the PDF structure allows it.
 - Works with encrypted PDFs and unencrypted PDFs.
 - Friendly error messages for missing files, invalid PDFs, wrong passwords, and file-size limits.
@@ -145,7 +147,9 @@ MIT.
 
 ### ✨ 功能
 
-- 单次请求内存解锁流程，应用不存储任何文件。
+- **两种模式：** 移除已知密码，或给 PDF 添加新密码（AES-256）保护 —— 顶部一键切换。
+- 单次请求内存处理流程，应用不存储任何文件。
+- 中英文双语界面、密码显示/隐藏、拖拽上传、确认密码校验。
 - 在 PDF 结构允许的情况下保留表单字段、书签大纲和元数据。
 - 支持已加密和未加密 PDF。
 - 对缺少文件、无效 PDF、密码错误、文件大小超限等情况提供友好的错误提示。

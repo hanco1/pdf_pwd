@@ -19,6 +19,7 @@ TEMPLATE = """\
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>PDF Unlocker</title>
+    <link rel="icon" href="data:," />
     <style>
       :root {
         --bg-1: #f8f1e8;
@@ -37,6 +38,15 @@ TEMPLATE = """\
 
       * {
         box-sizing: border-box;
+      }
+
+      [hidden] {
+        display: none !important;
+      }
+
+      button,
+      input {
+        font: inherit;
       }
 
       body {
@@ -119,6 +129,39 @@ TEMPLATE = """\
         max-width: 680px;
       }
 
+      .header-top {
+        display: flex;
+        justify-content: space-between;
+        gap: 16px;
+        align-items: flex-start;
+      }
+
+      .language-switcher {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        padding: 4px;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.56);
+        border: 1px solid rgba(31, 122, 140, 0.18);
+      }
+
+      .lang-button {
+        min-width: 44px;
+        min-height: 36px;
+        border: 0;
+        border-radius: 999px;
+        color: var(--muted);
+        background: transparent;
+        cursor: pointer;
+        font-weight: 800;
+      }
+
+      .lang-button[aria-pressed="true"] {
+        color: white;
+        background: var(--accent);
+      }
+
       .panel {
         position: relative;
         z-index: 1;
@@ -136,7 +179,14 @@ TEMPLATE = """\
       .panel-grid {
         display: grid;
         gap: 24px;
-        grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+        grid-template-columns: minmax(0, 0.82fr) minmax(320px, 1fr);
+        align-items: start;
+      }
+
+      h2 {
+        margin: 0 0 12px;
+        font-family: var(--font-display);
+        font-size: clamp(24px, 4vw, 34px);
       }
 
       .step-list {
@@ -155,11 +205,62 @@ TEMPLATE = """\
         gap: 16px;
       }
 
+      #unlock-form {
+        display: grid;
+        gap: 18px;
+      }
+
+      .mode-tabs {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 6px;
+        padding: 6px;
+        border-radius: 999px;
+        background: rgba(31, 122, 140, 0.1);
+        border: 1px solid rgba(31, 122, 140, 0.16);
+      }
+
+      .mode-tab {
+        min-height: 46px;
+        border: 0;
+        border-radius: 999px;
+        background: transparent;
+        color: var(--accent);
+        cursor: pointer;
+        font-weight: 800;
+        transition: background 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
+      }
+
+      .mode-tab[aria-selected="true"] {
+        background: var(--accent);
+        color: white;
+        box-shadow: 0 12px 24px rgba(31, 122, 140, 0.26);
+      }
+
+      .field {
+        display: grid;
+        gap: 8px;
+      }
+
       label {
         font-weight: 700;
         font-size: 14px;
         letter-spacing: 0.02em;
         color: var(--muted);
+      }
+
+      .drop-zone {
+        border: 2px dashed rgba(31, 122, 140, 0.38);
+        border-radius: 18px;
+        padding: 16px;
+        background: rgba(248, 241, 232, 0.72);
+        transition: border-color 0.2s ease, background 0.2s ease, transform 0.2s ease;
+      }
+
+      .drop-zone.is-dragover {
+        border-color: var(--accent-2);
+        background: rgba(200, 101, 58, 0.12);
+        transform: translateY(-1px);
       }
 
       .file-row {
@@ -184,6 +285,14 @@ TEMPLATE = """\
         transition: transform 0.2s ease, box-shadow 0.2s ease;
       }
 
+      .drop-zone .file-button {
+        border-style: solid;
+        background: white;
+        min-height: 44px;
+        display: inline-flex;
+        align-items: center;
+      }
+
       .file-button:hover {
         transform: translateY(-1px);
         box-shadow: 0 10px 20px rgba(31, 122, 140, 0.18);
@@ -194,13 +303,82 @@ TEMPLATE = """\
         color: var(--muted);
       }
 
+      .file-meta {
+        display: grid;
+        gap: 2px;
+        min-width: 0;
+      }
+
+      .file-size {
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .clear-file {
+        min-height: 44px;
+        border: 0;
+        border-radius: 999px;
+        background: rgba(200, 101, 58, 0.12);
+        color: var(--accent-2);
+        cursor: pointer;
+        font-weight: 800;
+        padding: 0 14px;
+      }
+
+      .password-shell {
+        position: relative;
+      }
+
+      .password-input,
       input[type="password"] {
         width: 100%;
-        padding: 12px 14px;
+        min-height: 48px;
+        padding: 12px 52px 12px 14px;
         border-radius: 12px;
         border: 1px solid rgba(31, 122, 140, 0.3);
         font-family: var(--font-body);
         font-size: 15px;
+      }
+
+      .password-toggle {
+        position: absolute;
+        top: 50%;
+        right: 6px;
+        width: 40px;
+        height: 40px;
+        transform: translateY(-50%);
+        border: 0;
+        border-radius: 999px;
+        background: transparent;
+        color: var(--accent);
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .password-toggle svg {
+        width: 20px;
+        height: 20px;
+        stroke: currentColor;
+        stroke-width: 1.8;
+        fill: none;
+      }
+
+      .helper,
+      .field-error {
+        margin: 0;
+        font-size: 13px;
+        line-height: 1.4;
+      }
+
+      .helper {
+        color: var(--muted);
+      }
+
+      .field-error {
+        color: #9b3f23;
+        font-weight: 800;
       }
 
       .actions {
@@ -213,6 +391,7 @@ TEMPLATE = """\
         display: inline-flex;
         align-items: center;
         justify-content: center;
+        min-height: 46px;
         padding: 12px 20px;
         border-radius: 999px;
         border: none;
@@ -242,6 +421,17 @@ TEMPLATE = """\
 
       .btn:hover:not(:disabled) {
         transform: translateY(-1px);
+      }
+
+      .btn:focus-visible,
+      .clear-file:focus-visible,
+      .file-button:focus-visible,
+      .lang-button:focus-visible,
+      .mode-tab:focus-visible,
+      .password-toggle:focus-visible,
+      input:focus-visible {
+        outline: 3px solid rgba(200, 101, 58, 0.55);
+        outline-offset: 3px;
       }
 
       .status {
@@ -284,6 +474,18 @@ TEMPLATE = """\
         font-size: 13px;
       }
 
+      .sr-only {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        margin: -1px;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+        white-space: nowrap;
+        border: 0;
+      }
+
       .loading .btn.primary {
         opacity: 0.7;
       }
@@ -293,7 +495,7 @@ TEMPLATE = """\
       }
 
       .loading .btn.primary span::after {
-        content: " (processing...)";
+        content: "";
         font-weight: 600;
       }
 
@@ -319,8 +521,21 @@ TEMPLATE = """\
       }
 
       @media (max-width: 600px) {
+        .page {
+          padding: 28px 16px 48px;
+        }
+
+        .header-top {
+          flex-direction: column;
+        }
+
         .panel {
           padding: 20px;
+        }
+
+        .panel-grid,
+        .mode-tabs {
+          grid-template-columns: 1fr;
         }
 
         .file-row {
@@ -336,44 +551,90 @@ TEMPLATE = """\
         }
       }
     </style>
-  </head>
+      </head>
   <body>
     <div class="page">
       <header>
-        <div class="badge">Local or hosted</div>
+        <div class="header-top">
+          <div class="badge" data-i18n="badge">Local or hosted</div>
+          <div class="language-switcher" aria-label="Language">
+            <button class="lang-button" type="button" data-lang="en" aria-pressed="true">EN</button>
+            <button class="lang-button" type="button" data-lang="zh" aria-pressed="false">中文</button>
+          </div>
+        </div>
         <h1>PDF Unlocker</h1>
-        <p>Upload a password-protected PDF, unlock it with the known password, and download an editable copy.</p>
+        <p data-i18n="intro">Remove a known PDF password, or add a new one, without storing files on disk.</p>
       </header>
 
       <section class="panel">
         <div class="panel-grid">
           <div>
-            <h2>How it works</h2>
-            <ol class="step-list">
-              <li>Select your PDF.</li>
-              <li>Enter the password if one is required.</li>
-              <li>Press process and grab the unlocked file.</li>
+            <h2 data-i18n="howTitle">How it works</h2>
+            <ol class="step-list" id="steps-list">
+              <li data-step="0">Choose the locked PDF.</li>
+              <li data-step="1">Enter the current password if it has one.</li>
+              <li data-step="2">Download the unlocked copy.</li>
             </ol>
           </div>
           <div class="form-card">
-            <form id="unlock-form" method="post" action="/process" enctype="multipart/form-data">
-              <div>
-                <label for="pdf">PDF file</label>
-                <div class="file-row">
+            <form id="unlock-form" method="post" action="/process" enctype="multipart/form-data" novalidate>
+              <input id="mode-field" name="mode" type="hidden" value="{{ initial_mode }}" />
+
+              <div class="mode-tabs" role="tablist" aria-label="PDF mode">
+                <button class="mode-tab" id="tab-unlock" type="button" role="tab" data-mode="unlock" aria-selected="{{ 'true' if initial_mode == 'unlock' else 'false' }}" aria-controls="mode-panel" data-i18n="modeUnlock">🔓 Remove password</button>
+                <button class="mode-tab" id="tab-lock" type="button" role="tab" data-mode="lock" aria-selected="{{ 'true' if initial_mode == 'lock' else 'false' }}" aria-controls="mode-panel" data-i18n="modeLock">🔒 Add password</button>
+              </div>
+              <div class="sr-only" id="mode-announcer" aria-live="polite"></div>
+
+              <div class="field">
+                <label for="pdf" data-i18n="fileLabel">PDF file</label>
+                <div class="drop-zone" id="drop-zone">
                   <input id="pdf" name="pdf" type="file" accept="application/pdf" required />
-                  <label class="file-button" for="pdf">Upload PDF</label>
-                  <span class="file-name" id="file-name">No file selected</span>
+                  <div class="file-row">
+                    <button class="file-button" id="file-button" type="button" data-i18n="upload">Upload PDF</button>
+                    <div class="file-meta">
+                      <span class="file-name" id="file-name" data-i18n="noFile">No file selected</span>
+                      <span class="file-size" id="file-size"></span>
+                    </div>
+                    <button class="clear-file" id="clear-file" type="button" hidden data-i18n="clearFile">Clear file</button>
+                  </div>
                 </div>
               </div>
-              <div>
-                <label for="password">Password (if required)</label>
-                <input id="password" name="password" type="password" placeholder="Enter PDF password" />
+
+              <div class="field" id="mode-panel">
+                <label for="password" id="password-label">PDF password</label>
+                <div class="password-shell">
+                  <input class="password-input" id="password" name="password" type="password" placeholder="Enter the current PDF password" autocomplete="current-password" aria-describedby="password-helper mismatch-message" />
+                  <button class="password-toggle" type="button" data-toggle-password="password" aria-label="Show password" aria-pressed="false">
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                      <path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"></path>
+                      <circle cx="12" cy="12" r="3"></circle>
+                    </svg>
+                  </button>
+                </div>
+                <p class="helper" id="password-helper">Leave blank if the PDF opens without a password.</p>
               </div>
+
+              <div class="field" id="confirm-field" {% if initial_mode != "lock" %}hidden{% endif %}>
+                <label for="confirm-password" id="confirm-label">Confirm password</label>
+                <div class="password-shell">
+                  <input class="password-input" id="confirm-password" name="confirm_password" type="password" placeholder="Re-enter the new password" autocomplete="new-password" aria-describedby="confirm-helper mismatch-message" />
+                  <button class="password-toggle" type="button" data-toggle-password="confirm-password" aria-label="Show password" aria-pressed="false">
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                      <path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"></path>
+                      <circle cx="12" cy="12" r="3"></circle>
+                    </svg>
+                  </button>
+                </div>
+                <p class="helper" id="confirm-helper">Both entries must match before protecting the PDF.</p>
+              </div>
+              <p class="field-error" id="mismatch-message" role="alert" aria-live="polite" hidden>Passwords do not match.</p>
+
               <div class="actions">
-                <button class="btn primary" id="process-btn" type="submit" disabled><span>Process</span></button>
-                <button class="btn secondary" type="reset" id="reset-btn">Clear</button>
+                <button class="btn primary" id="process-btn" type="submit" disabled><span id="process-label">Unlock PDF</span></button>
+                <button class="btn secondary" type="button" id="reset-btn" data-i18n="clear">Clear</button>
               </div>
-              <p class="note">Hosted uploads are limited to {{ max_mb }} MB. Run it locally for bigger files. Unlock only PDFs you own or have rights to edit.</p>
+              <p class="note" id="limit-note" data-i18n="limitNote">Hosted uploads are limited to {{ max_mb }} MB. Run it locally for bigger files. Only process PDFs you own or have rights to edit.</p>
             </form>
           </div>
         </div>
@@ -386,54 +647,366 @@ TEMPLATE = """\
         {% endif %}
       </section>
 
-      <footer>Built with pypdf, runs entirely on your computer.</footer>
+      <footer data-i18n="footer">Built with pypdf. Runs locally, or hosted on Vercel - the hosted version processes your PDF in memory and stores nothing.</footer>
     </div>
     <script>
       const fileInput = document.getElementById("pdf");
       const fileName = document.getElementById("file-name");
+      const fileSize = document.getElementById("file-size");
+      const fileButton = document.getElementById("file-button");
+      const clearFileButton = document.getElementById("clear-file");
+      const dropZone = document.getElementById("drop-zone");
+      const modeInput = document.getElementById("mode-field");
+      const modeTabs = Array.from(document.querySelectorAll(".mode-tab"));
+      const modeAnnouncer = document.getElementById("mode-announcer");
+      const passwordInput = document.getElementById("password");
+      const confirmField = document.getElementById("confirm-field");
+      const confirmInput = document.getElementById("confirm-password");
+      const passwordLabel = document.getElementById("password-label");
+      const passwordHelper = document.getElementById("password-helper");
+      const confirmLabel = document.getElementById("confirm-label");
+      const confirmHelper = document.getElementById("confirm-helper");
+      const mismatchMessage = document.getElementById("mismatch-message");
       const processButton = document.getElementById("process-btn");
+      const processLabel = document.getElementById("process-label");
       const resetButton = document.getElementById("reset-btn");
       const form = document.getElementById("unlock-form");
+      const maxMb = "{{ max_mb }}";
+      const initialMode = "{{ initial_mode }}";
+      let currentMode = initialMode === "lock" ? "lock" : "unlock";
+      let currentLang = "en";
+      let loadingTimer = null;
 
-      function updateState() {
-        if (fileInput.files.length > 0) {
-          fileName.textContent = fileInput.files[0].name;
-          processButton.disabled = false;
-        } else {
-          fileName.textContent = "No file selected";
-          processButton.disabled = true;
+      const copy = {
+        en: {
+          static: {
+            badge: "Local or hosted",
+            intro: "Remove a known PDF password, or add a new one, without storing files on disk.",
+            howTitle: "How it works",
+            modeUnlock: "🔓 Remove password",
+            modeLock: "🔒 Add password",
+            fileLabel: "PDF file",
+            upload: "Upload PDF",
+            noFile: "No file selected",
+            clearFile: "Clear file",
+            clear: "Clear",
+            limitNote: `Hosted uploads are limited to ${maxMb} MB. Run it locally for bigger files. Only process PDFs you own or have rights to edit.`,
+            footer: "Built with pypdf. Runs locally, or hosted on Vercel - the hosted version processes your PDF in memory and stores nothing.",
+            showPassword: "Show password",
+            hidePassword: "Hide password",
+            mismatch: "Passwords do not match.",
+            processing: "Processing..."
+          },
+          modes: {
+            unlock: {
+              passwordLabel: "PDF password",
+              passwordPlaceholder: "Enter the current PDF password",
+              passwordHelper: "Leave blank if the PDF opens without a password.",
+              submit: "Unlock PDF",
+              announce: "Remove password mode selected.",
+              steps: [
+                "Choose the locked PDF.",
+                "Enter the current password if it has one.",
+                "Download the unlocked copy."
+              ]
+            },
+            lock: {
+              passwordLabel: "New password",
+              passwordPlaceholder: "Enter a new password",
+              passwordHelper: "This password will be required to open the protected PDF.",
+              confirmLabel: "Confirm password",
+              confirmPlaceholder: "Re-enter the new password",
+              confirmHelper: "Both entries must match before protecting the PDF.",
+              submit: "Protect PDF",
+              announce: "Add password mode selected.",
+              steps: [
+                "Choose the PDF you want to protect.",
+                "Enter and confirm the new password.",
+                "Download the protected copy."
+              ]
+            }
+          }
+        },
+        zh: {
+          static: {
+            badge: "本地或托管",
+            intro: "移除已知 PDF 密码，或添加新密码；文件不会写入磁盘。",
+            howTitle: "工作方式",
+            modeUnlock: "🔓 移除密码",
+            modeLock: "🔒 添加密码",
+            fileLabel: "PDF 文件",
+            upload: "上传 PDF",
+            noFile: "未选择文件",
+            clearFile: "清除文件",
+            clear: "清空",
+            limitNote: `托管上传限制为 ${maxMb} MB。更大的文件请本地运行。仅处理你拥有或有权编辑的 PDF。`,
+            footer: "可本地运行，也可部署在 Vercel - 托管版本只在内存中处理 PDF，不会存储文件。",
+            showPassword: "显示密码",
+            hidePassword: "隐藏密码",
+            mismatch: "两次输入的密码不一致。",
+            processing: "处理中..."
+          },
+          modes: {
+            unlock: {
+              passwordLabel: "PDF 密码",
+              passwordPlaceholder: "输入当前 PDF 密码",
+              passwordHelper: "如果这个 PDF 不需要密码即可打开，可以留空。",
+              submit: "解锁 PDF",
+              announce: "已选择移除密码模式。",
+              steps: [
+                "选择需要移除密码的 PDF。",
+                "输入当前密码；如果不需要密码可留空。",
+                "下载已解锁的副本。"
+              ]
+            },
+            lock: {
+              passwordLabel: "新密码",
+              passwordPlaceholder: "输入新密码",
+              passwordHelper: "之后打开受保护 PDF 时需要这个密码。",
+              confirmLabel: "确认密码",
+              confirmPlaceholder: "再次输入新密码",
+              confirmHelper: "两次输入一致后才能保护 PDF。",
+              submit: "保护 PDF",
+              announce: "已选择添加密码模式。",
+              steps: [
+                "选择需要保护的 PDF。",
+                "输入并确认新密码。",
+                "下载已加密保护的副本。"
+              ]
+            }
+          }
         }
+      };
+
+      function formatBytes(bytes) {
+        if (!bytes && bytes !== 0) return "";
+        if (bytes < 1024) return `${bytes} B`;
+        const units = ["KB", "MB", "GB"];
+        let value = bytes / 1024;
+        let unitIndex = 0;
+        while (value >= 1024 && unitIndex < units.length - 1) {
+          value = value / 1024;
+          unitIndex += 1;
+        }
+        return `${value.toFixed(value >= 10 ? 1 : 2)} ${units[unitIndex]}`;
       }
 
+      function setLoading(isLoading) {
+        form.classList.toggle("loading", isLoading);
+        if (isLoading) {
+          processLabel.textContent = copy[currentLang].static.processing;
+          processButton.disabled = true;
+          return;
+        }
+        applyModeCopy();
+        updateState();
+      }
+
+      function activeModeCopy() {
+        return copy[currentLang].modes[currentMode];
+      }
+
+      function applyLanguage() {
+        const strings = copy[currentLang].static;
+        document.documentElement.lang = currentLang === "zh" ? "zh-Hans" : "en";
+        document.querySelectorAll("[data-i18n]").forEach((node) => {
+          const key = node.getAttribute("data-i18n");
+          if (strings[key]) node.textContent = strings[key];
+        });
+        document.querySelectorAll(".lang-button").forEach((button) => {
+          button.setAttribute("aria-pressed", String(button.dataset.lang === currentLang));
+        });
+        mismatchMessage.textContent = strings.mismatch;
+        document.querySelectorAll("[data-toggle-password]").forEach((button) => {
+          const target = document.getElementById(button.dataset.togglePassword);
+          const label = target.type === "text" ? strings.hidePassword : strings.showPassword;
+          button.setAttribute("aria-label", label);
+        });
+        applyModeCopy();
+        updateState();
+      }
+
+      function applyModeCopy() {
+        const modeCopy = activeModeCopy();
+        passwordLabel.textContent = modeCopy.passwordLabel;
+        passwordInput.placeholder = modeCopy.passwordPlaceholder;
+        passwordHelper.textContent = modeCopy.passwordHelper;
+        processLabel.textContent = modeCopy.submit;
+        document.querySelectorAll("[data-step]").forEach((step, index) => {
+          step.textContent = modeCopy.steps[index];
+        });
+        confirmLabel.textContent = modeCopy.confirmLabel || "";
+        confirmInput.placeholder = modeCopy.confirmPlaceholder || "";
+        confirmHelper.textContent = modeCopy.confirmHelper || "";
+        modeAnnouncer.textContent = modeCopy.announce;
+      }
+
+      function validatePasswords() {
+        if (currentMode !== "lock") {
+          mismatchMessage.hidden = true;
+          confirmInput.setCustomValidity("");
+          return true;
+        }
+        const password = passwordInput.value;
+        const confirmation = confirmInput.value;
+        const matches = password.length > 0 && password === confirmation;
+        const showMismatch = confirmation.length > 0 && password !== confirmation;
+        mismatchMessage.hidden = !showMismatch;
+        confirmInput.setCustomValidity(showMismatch ? copy[currentLang].static.mismatch : "");
+        return matches;
+      }
+
+      function updateFileText() {
+        const file = fileInput.files[0];
+        if (!file) {
+          fileName.textContent = copy[currentLang].static.noFile;
+          fileSize.textContent = "";
+          clearFileButton.hidden = true;
+          return;
+        }
+        fileName.textContent = file.name;
+        fileSize.textContent = formatBytes(file.size);
+        clearFileButton.hidden = false;
+      }
+
+      function updateState() {
+        updateFileText();
+        const hasFile = fileInput.files.length > 0;
+        const passwordsValid = validatePasswords();
+        processButton.disabled = !hasFile || !passwordsValid || form.classList.contains("loading");
+      }
+
+      function setMode(mode) {
+        currentMode = mode === "lock" ? "lock" : "unlock";
+        modeInput.value = currentMode;
+        modeTabs.forEach((tab) => {
+          const selected = tab.dataset.mode === currentMode;
+          tab.setAttribute("aria-selected", String(selected));
+          tab.tabIndex = selected ? 0 : -1;
+        });
+        const locking = currentMode === "lock";
+        confirmField.hidden = !locking;
+        confirmInput.disabled = !locking;
+        passwordInput.required = locking;
+        confirmInput.required = locking;
+        passwordInput.autocomplete = locking ? "new-password" : "current-password";
+        applyModeCopy();
+        updateState();
+      }
+
+      function setDroppedFile(files) {
+        if (!files.length) return;
+        try {
+          const transfer = new DataTransfer();
+          transfer.items.add(files[0]);
+          fileInput.files = transfer.files;
+        } catch (error) {
+          try {
+            fileInput.files = files;
+          } catch (ignored) {
+            return;
+          }
+        }
+        updateState();
+      }
+
+      modeTabs.forEach((tab) => {
+        tab.addEventListener("click", () => setMode(tab.dataset.mode));
+        tab.addEventListener("keydown", (event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            setMode(tab.dataset.mode);
+          }
+        });
+      });
+
+      document.querySelectorAll(".lang-button").forEach((button) => {
+        button.addEventListener("click", () => {
+          currentLang = button.dataset.lang === "zh" ? "zh" : "en";
+          applyLanguage();
+        });
+      });
+
+      document.querySelectorAll("[data-toggle-password]").forEach((button) => {
+        const target = document.getElementById(button.dataset.togglePassword);
+        button.addEventListener("click", () => {
+          const currentlyVisible = target.type === "text";
+          target.type = currentlyVisible ? "password" : "text";
+          button.setAttribute("aria-pressed", String(!currentlyVisible));
+          const label = currentlyVisible
+            ? copy[currentLang].static.showPassword
+            : copy[currentLang].static.hidePassword;
+          button.setAttribute("aria-label", label);
+        });
+      });
+
+      fileButton.addEventListener("click", () => fileInput.click());
       fileInput.addEventListener("change", updateState);
-      resetButton.addEventListener("click", () => {
-        setTimeout(updateState, 0);
-      });
-      form.addEventListener("submit", () => {
-        form.classList.add("loading");
-        processButton.disabled = true;
-        setTimeout(() => {
-          form.classList.remove("loading");
-          updateState();
-        }, 2500);
-      });
-      window.addEventListener("pageshow", () => {
-        form.classList.remove("loading");
+      passwordInput.addEventListener("input", updateState);
+      confirmInput.addEventListener("input", updateState);
+      clearFileButton.addEventListener("click", () => {
+        fileInput.value = "";
         updateState();
       });
-      updateState();
+      resetButton.addEventListener("click", () => {
+        fileInput.value = "";
+        passwordInput.value = "";
+        confirmInput.value = "";
+        setLoading(false);
+      });
+
+      ["dragenter", "dragover"].forEach((eventName) => {
+        dropZone.addEventListener(eventName, (event) => {
+          event.preventDefault();
+          dropZone.classList.add("is-dragover");
+        });
+      });
+      ["dragleave", "drop"].forEach((eventName) => {
+        dropZone.addEventListener(eventName, (event) => {
+          event.preventDefault();
+          dropZone.classList.remove("is-dragover");
+        });
+      });
+      dropZone.addEventListener("drop", (event) => {
+        setDroppedFile(event.dataTransfer.files);
+      });
+
+      form.addEventListener("submit", (event) => {
+        updateState();
+        if (processButton.disabled) {
+          event.preventDefault();
+          if (currentMode === "lock" && !validatePasswords()) {
+            (confirmInput.value ? confirmInput : passwordInput).focus();
+          }
+          return;
+        }
+        setLoading(true);
+        window.clearTimeout(loadingTimer);
+        loadingTimer = window.setTimeout(() => setLoading(false), 1800);
+      });
+      window.addEventListener("pageshow", () => {
+        window.clearTimeout(loadingTimer);
+        setLoading(false);
+      });
+      applyLanguage();
+      setMode(currentMode);
     </script>
   </body>
 </html>
 """
 
 
-def render_page(status=None, message=None):
+def normalize_mode(mode):
+    return mode if mode in {"unlock", "lock"} else "unlock"
+
+
+def render_page(status=None, message=None, mode="unlock"):
+    mode = normalize_mode(mode)
     status_title = None
     if status == "success":
-        status_title = "Unlocked"
+        status_title = "Protected" if mode == "lock" else "Unlocked"
     elif status == "error":
-        status_title = "Could not unlock"
+        status_title = "Could not protect" if mode == "lock" else "Could not unlock"
     elif status == "info":
         status_title = "Note"
     return render_template_string(
@@ -442,10 +1015,11 @@ def render_page(status=None, message=None):
         status_title=status_title,
         message=message,
         max_mb=MAX_MB,
+        initial_mode=mode,
     )
 
 
-def unlocked_pdf_buffer(reader):
+def writer_from_reader(reader):
     writer = PdfWriter()
     try:
         writer.append(reader)
@@ -454,11 +1028,29 @@ def unlocked_pdf_buffer(reader):
         writer = PdfWriter()
         for page in reader.pages:
             writer.add_page(page)
+    return writer
 
+
+def pdf_buffer_from_writer(writer):
     output = io.BytesIO()
     writer.write(output)
     output.seek(0)
     return output
+
+
+def encrypted_pdf_buffer(reader, password):
+    writer = writer_from_reader(reader)
+    try:
+        writer.encrypt(
+            user_password=password,
+            owner_password=password,
+            algorithm="AES-256",
+        )
+    except Exception:
+        app.logger.debug("Falling back to default PDF encryption algorithm.")
+        writer = writer_from_reader(reader)
+        writer.encrypt(user_password=password, owner_password=password)
+    return pdf_buffer_from_writer(writer)
 
 
 @app.route("/", methods=["GET"])
@@ -479,11 +1071,15 @@ def handle_file_too_large(error):
 
 @app.route("/process", methods=["POST"])
 def process():
+    mode = normalize_mode(request.form.get("mode", "unlock"))
     upload = request.files.get("pdf")
     if not upload or upload.filename == "":
-        return render_page("error", "Please choose a PDF file to unlock."), 400
+        return render_page("error", "Please choose a PDF file.", mode), 400
 
     password = request.form.get("password", "")
+    if mode == "lock" and not password:
+        return render_page("error", "Enter a password to protect the PDF.", mode), 400
+
     original_name = secure_filename(upload.filename)
     base_name = os.path.splitext(original_name)[0] if original_name else ""
     base_name = secure_filename(base_name) or "document"
@@ -492,17 +1088,34 @@ def process():
         data = upload.read()
         reader = PdfReader(io.BytesIO(data))
     except (EmptyFileError, PdfReadError, PdfStreamError):
-        return render_page("error", "That file does not appear to be a valid PDF."), 400
+        return render_page("error", "That file does not appear to be a valid PDF.", mode), 400
     except Exception:
-        return render_page("error", "That file does not appear to be a valid PDF."), 400
+        return render_page("error", "That file does not appear to be a valid PDF.", mode), 400
 
     try:
-        if reader.is_encrypted:
-            result = reader.decrypt(password or "")
-            if result == 0:
-                return render_page("error", "That password did not unlock this PDF."), 400
+        if mode == "lock":
+            if reader.is_encrypted and reader.decrypt("") == 0:
+                return (
+                    render_page(
+                        "error",
+                        "This PDF is already password-protected. Switch to “Remove password” first.",
+                        mode,
+                    ),
+                    400,
+                )
 
-        output = unlocked_pdf_buffer(reader)
+            output = encrypted_pdf_buffer(reader, password)
+            return send_file(
+                output,
+                mimetype="application/pdf",
+                as_attachment=True,
+                download_name=f"{base_name}_protected.pdf",
+            )
+
+        if reader.is_encrypted and reader.decrypt(password or "") == 0:
+            return render_page("error", "That password did not unlock this PDF.", mode), 400
+
+        output = pdf_buffer_from_writer(writer_from_reader(reader))
         return send_file(
             output,
             mimetype="application/pdf",
@@ -510,10 +1123,10 @@ def process():
             download_name=f"{base_name}_unlocked.pdf",
         )
     except PdfReadError:
-        return render_page("error", "That file does not appear to be a valid PDF."), 400
+        return render_page("error", "That file does not appear to be a valid PDF.", mode), 400
     except Exception:
-        app.logger.exception("Something went wrong while unlocking the PDF.")
-        return render_page("error", "Something went wrong while unlocking the PDF."), 500
+        app.logger.exception("Something went wrong while processing the PDF.")
+        return render_page("error", "Something went wrong while processing the PDF.", mode), 500
 
 
 if __name__ == "__main__":
