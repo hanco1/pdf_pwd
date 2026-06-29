@@ -22,7 +22,7 @@
 </p>
 
 <p align="center">
-  <a href="{{LIVE_URL}}"><b>🔓 Live demo / 在线体验</b></a>
+  <a href="https://pdf-pwd.myboringtools.top"><b>🔓 Live demo / 在线体验</b></a>
 </p>
 
 ![PDF Unlocker UI](screenshots/ui-safari-windows.png)
@@ -52,13 +52,13 @@ The app is local-first. When you run it yourself, files stay on your machine. Th
 
 Primary demo:
 
-[{{LIVE_URL}}]({{LIVE_URL}})
+[https://pdf-pwd.myboringtools.top](https://pdf-pwd.myboringtools.top)
 
 Alternate Vercel URL:
 
-[{{VERCEL_URL}}]({{VERCEL_URL}})
+[https://pdf-pwd-eight.vercel.app](https://pdf-pwd-eight.vercel.app)
 
-Both links are placeholders and can be filled in after deployment.
+The Vercel URL is live now; the custom domain activates once DNS finishes propagating.
 
 ### 🖥️ Run locally
 
@@ -156,13 +156,13 @@ MIT.
 
 主链接：
 
-[{{LIVE_URL}}]({{LIVE_URL}})
+[https://pdf-pwd.myboringtools.top](https://pdf-pwd.myboringtools.top)
 
 备用 Vercel 链接：
 
-[{{VERCEL_URL}}]({{VERCEL_URL}})
+[https://pdf-pwd-eight.vercel.app](https://pdf-pwd-eight.vercel.app)
 
-这两个链接是占位符，部署后可替换为实际地址。
+Vercel 链接已可访问；自定义域名在 DNS 生效后启用。
 
 ### 🖥️ 本地运行
 
