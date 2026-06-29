@@ -1,3 +1,4 @@
+import base64
 import io
 import os
 
@@ -976,7 +977,27 @@ TEMPLATE = """\
           if (event.key === "Enter" || event.key === " ") {
             event.preventDefault();
             setMode(tab.dataset.mode);
+            return;
           }
+
+          const currentIndex = modeTabs.indexOf(tab);
+          let nextIndex = currentIndex;
+          if (event.key === "ArrowLeft") {
+            nextIndex = (currentIndex - 1 + modeTabs.length) % modeTabs.length;
+          } else if (event.key === "ArrowRight") {
+            nextIndex = (currentIndex + 1) % modeTabs.length;
+          } else if (event.key === "Home") {
+            nextIndex = 0;
+          } else if (event.key === "End") {
+            nextIndex = modeTabs.length - 1;
+          } else {
+            return;
+          }
+
+          event.preventDefault();
+          const nextTab = modeTabs[nextIndex];
+          setMode(nextTab.dataset.mode);
+          nextTab.focus();
         });
       });
 
@@ -1130,6 +1151,14 @@ def api_error(message, code, status):
     return jsonify(error=message, code=code), status
 
 
+def no_file_error():
+    return api_error("Choose a PDF file.", "no_file", 400)
+
+
+def invalid_pdf_error():
+    return api_error("That file does not appear to be a valid PDF.", "invalid_pdf", 400)
+
+
 def is_api_path():
     return request.path == "/api" or request.path.startswith("/api/")
 
@@ -1145,7 +1174,7 @@ def api_file_too_large_message():
 def uploaded_api_file():
     upload = request.files.get("file") or request.files.get("pdf")
     if not upload or upload.filename == "":
-        return None, api_error("Choose a PDF file.", "no_file", 400)
+        return None, no_file_error()
     return upload, None
 
 
@@ -1155,16 +1184,129 @@ def base_name_from_upload(upload):
     return secure_filename(base_name) or "document"
 
 
-def reader_from_upload(upload):
+def base_name_from_filename(filename):
+    original_name = secure_filename(str(filename or "document"))
+    base_name = os.path.splitext(original_name)[0] if original_name else ""
+    return secure_filename(base_name) or "document"
+
+
+def pdf_bytes_from_upload(upload):
     try:
         data = upload.read()
-        if not data:
-            return None, api_error("Choose a PDF file.", "no_file", 400)
+    except Exception:
+        return None, invalid_pdf_error()
+    if not data:
+        return None, no_file_error()
+    return data, None
+
+
+def reader_from_bytes(data):
+    if not data:
+        return None, invalid_pdf_error()
+    try:
         return PdfReader(io.BytesIO(data)), None
     except (EmptyFileError, PdfReadError, PdfStreamError):
-        return None, api_error("That file does not appear to be a valid PDF.", "invalid_pdf", 400)
+        return None, invalid_pdf_error()
     except Exception:
-        return None, api_error("That file does not appear to be a valid PDF.", "invalid_pdf", 400)
+        return None, invalid_pdf_error()
+
+
+def reader_from_upload(upload):
+    data, error = pdf_bytes_from_upload(upload)
+    if error:
+        return None, error
+    return reader_from_bytes(data)
+
+
+def api_output_mode(default_mode, payload=None):
+    mode = request.args.get("output") or request.args.get("format")
+    if mode is None and payload:
+        mode = payload.get("output") or payload.get("format")
+    if isinstance(mode, str) and mode.lower() in {"base64", "binary"}:
+        return mode.lower()
+    return default_mode
+
+
+def strip_base64_data_url(value):
+    text = value.strip()
+    lower = text.lower()
+    marker = ";base64,"
+    if lower.startswith("data:") and marker in lower:
+        return text[lower.index(marker) + len(marker) :]
+    return text
+
+
+def api_request_data():
+    if request.is_json:
+        payload = request.get_json(silent=True) or {}
+        if not isinstance(payload, dict):
+            return None, no_file_error()
+
+        encoded = None
+        for field in ("file_base64", "pdf_base64", "file", "data"):
+            if field in payload:
+                encoded = payload.get(field)
+                break
+        if encoded is None:
+            return None, no_file_error()
+        if not isinstance(encoded, str):
+            return None, invalid_pdf_error()
+
+        try:
+            data = base64.b64decode(strip_base64_data_url(encoded), validate=True)
+        except Exception:
+            return None, invalid_pdf_error()
+        if not data:
+            return None, invalid_pdf_error()
+
+        password = payload.get("password", "")
+        password = "" if password is None else str(password)
+
+        return (
+            {
+                "data": data,
+                "password": password,
+                "base_name": base_name_from_filename(payload.get("filename", "document")),
+                "output_mode": api_output_mode("base64", payload),
+            },
+            None,
+        )
+
+    upload, error = uploaded_api_file()
+    if error:
+        return None, error
+    data, error = pdf_bytes_from_upload(upload)
+    if error:
+        return None, error
+
+    return (
+        {
+            "data": data,
+            "password": request.form.get("password", ""),
+            "base_name": base_name_from_upload(upload),
+            "output_mode": api_output_mode("binary"),
+        },
+        None,
+    )
+
+
+def api_pdf_result(pdf_bytes, download_name, output_mode, encrypted):
+    if output_mode == "base64":
+        return (
+            jsonify(
+                filename=download_name,
+                pdf_base64=base64.b64encode(pdf_bytes).decode("ascii"),
+                bytes=len(pdf_bytes),
+                encrypted=bool(encrypted),
+            ),
+            200,
+        )
+    return send_file(
+        io.BytesIO(pdf_bytes),
+        mimetype="application/pdf",
+        as_attachment=True,
+        download_name=download_name,
+    )
 
 
 def api_description():
@@ -1172,25 +1314,75 @@ def api_description():
         "name": "PDF Unlocker API",
         "version": "v1",
         "size_limit": f"{MAX_MB} MB on the hosted version",
+        "input_modes": {
+            "multipart": {
+                "content_type": "multipart/form-data",
+                "fields": {
+                    "file": "PDF upload field. You may also use the field name pdf.",
+                    "password": "Password string. Optional for unlock, required for lock.",
+                },
+                "default_output": "binary application/pdf attachment",
+            },
+            "json_base64": {
+                "content_type": "application/json",
+                "fields": {
+                    "file_base64": "Base64 PDF string. You may also use pdf_base64, file, or data.",
+                    "password": "Password string. Optional for unlock, required for lock.",
+                    "filename": "Optional source filename used to build the download name.",
+                    "output": "Optional: base64 or binary. Query parameters override this.",
+                },
+                "default_output": "JSON base64 response",
+            },
+        },
+        "output": {
+            "override": "Use ?output=base64 or ?output=binary. ?format=base64 and ?format=binary are also accepted.",
+            "defaults": {
+                "multipart": "binary",
+                "application/json": "base64",
+            },
+            "base64_response": {
+                "filename": "Processed PDF filename.",
+                "pdf_base64": "Base64-encoded processed PDF bytes.",
+                "bytes": "Processed PDF byte length.",
+                "encrypted": "true for lock responses, false for unlock responses.",
+            },
+        },
+        "n8n": (
+            "For automation, send application/json with file_base64 and password. "
+            "The JSON response contains pdf_base64, which can be converted back to binary in a downstream node. "
+            "Base64 inflates size by about 33%, so the practical hosted PDF size is below the roughly 4.5 MB body limit."
+        ),
         "endpoints": {
             "/api/v1/unlock": {
                 "method": "POST",
-                "content_type": "multipart/form-data",
-                "params": {
+                "content_types": ["multipart/form-data", "application/json"],
+                "multipart_params": {
                     "file": "PDF upload field. You may also use the field name pdf.",
                     "password": "Optional. Use the known password when the PDF is encrypted.",
                 },
-                "success": "Binary application/pdf response named {base}_unlocked.pdf.",
+                "json_params": {
+                    "file_base64": "Required base64 PDF string. Aliases: pdf_base64, file, data.",
+                    "password": "Optional. Use the known password when the PDF is encrypted.",
+                    "filename": "Optional. Defaults to document.",
+                    "output": "Optional: base64 or binary. Query parameter output/format overrides it.",
+                },
+                "success": "Returns {base}_unlocked.pdf. Multipart defaults to binary; JSON defaults to base64 JSON.",
                 "errors": ["no_file", "invalid_pdf", "wrong_password", "file_too_large", "internal_error"],
             },
             "/api/v1/lock": {
                 "method": "POST",
-                "content_type": "multipart/form-data",
-                "params": {
+                "content_types": ["multipart/form-data", "application/json"],
+                "multipart_params": {
                     "file": "PDF upload field. You may also use the field name pdf.",
                     "password": "Required. AES-256 password for the protected PDF.",
                 },
-                "success": "Binary application/pdf response named {base}_protected.pdf.",
+                "json_params": {
+                    "file_base64": "Required base64 PDF string. Aliases: pdf_base64, file, data.",
+                    "password": "Required. AES-256 password for the protected PDF.",
+                    "filename": "Optional. Defaults to document.",
+                    "output": "Optional: base64 or binary. Query parameter output/format overrides it.",
+                },
+                "success": "Returns {base}_protected.pdf. Multipart defaults to binary; JSON defaults to base64 JSON.",
                 "errors": [
                     "no_file",
                     "invalid_pdf",
@@ -1204,6 +1396,11 @@ def api_description():
         "examples": {
             "unlock": 'curl -X POST https://pdf-pwd.myboringtools.top/api/v1/unlock -F "file=@locked.pdf" -F "password=secret" -o unlocked.pdf',
             "lock": 'curl -X POST https://pdf-pwd.myboringtools.top/api/v1/lock -F "file=@doc.pdf" -F "password=newsecret" -o protected.pdf',
+            "lock_json_base64": (
+                "curl -X POST https://pdf-pwd.myboringtools.top/api/v1/lock "
+                '-H "Content-Type: application/json" '
+                "-d '{\"file_base64\":\"<BASE64_OF_PDF>\",\"password\":\"secret\"}'"
+            ),
             "python": (
                 "import requests\n"
                 "with open('locked.pdf', 'rb') as pdf:\n"
@@ -1257,29 +1454,28 @@ def api_unlock():
     if request.method == "OPTIONS":
         return empty_api_response()
 
-    upload, error = uploaded_api_file()
+    api_input, error = api_request_data()
     if error:
         return error
 
-    reader, error = reader_from_upload(upload)
+    reader, error = reader_from_bytes(api_input["data"])
     if error:
         return error
-
-    password = request.form.get("password", "")
-    base_name = base_name_from_upload(upload)
 
     try:
+        password = api_input["password"]
         if reader.is_encrypted and reader.decrypt(password or "") == 0:
             return api_error("That password did not unlock this PDF.", "wrong_password", 400)
 
-        return send_file(
-            unlocked_pdf_buffer(reader),
-            mimetype="application/pdf",
-            as_attachment=True,
-            download_name=f"{base_name}_unlocked.pdf",
+        pdf_bytes = unlocked_pdf_buffer(reader).getvalue()
+        return api_pdf_result(
+            pdf_bytes,
+            f"{api_input['base_name']}_unlocked.pdf",
+            api_input["output_mode"],
+            encrypted=False,
         )
     except PdfReadError:
-        return api_error("That file does not appear to be a valid PDF.", "invalid_pdf", 400)
+        return invalid_pdf_error()
     except Exception:
         app.logger.exception("Something went wrong while processing the PDF API unlock request.")
         return api_error("Something went wrong while processing the PDF.", "internal_error", 500)
@@ -1290,19 +1486,17 @@ def api_lock():
     if request.method == "OPTIONS":
         return empty_api_response()
 
-    upload, error = uploaded_api_file()
+    api_input, error = api_request_data()
     if error:
         return error
 
-    password = request.form.get("password", "")
+    password = api_input["password"]
     if not password:
         return api_error("Enter a password to protect the PDF.", "password_required", 400)
 
-    reader, error = reader_from_upload(upload)
+    reader, error = reader_from_bytes(api_input["data"])
     if error:
         return error
-
-    base_name = base_name_from_upload(upload)
 
     try:
         if reader.is_encrypted and reader.decrypt("") == 0:
@@ -1312,14 +1506,15 @@ def api_lock():
                 400,
             )
 
-        return send_file(
-            encrypted_pdf_buffer(reader, password),
-            mimetype="application/pdf",
-            as_attachment=True,
-            download_name=f"{base_name}_protected.pdf",
+        pdf_bytes = encrypted_pdf_buffer(reader, password).getvalue()
+        return api_pdf_result(
+            pdf_bytes,
+            f"{api_input['base_name']}_protected.pdf",
+            api_input["output_mode"],
+            encrypted=True,
         )
     except PdfReadError:
-        return api_error("That file does not appear to be a valid PDF.", "invalid_pdf", 400)
+        return invalid_pdf_error()
     except Exception:
         app.logger.exception("Something went wrong while processing the PDF API lock request.")
         return api_error("Something went wrong while processing the PDF.", "internal_error", 500)
