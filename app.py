@@ -1,21 +1,16 @@
+import io
 import os
-import uuid
 
-from flask import Flask, render_template_string, request, send_file, url_for
+from flask import Flask, render_template_string, request, send_file
 from pypdf import PdfReader, PdfWriter
-from pypdf.errors import PdfReadError
+from pypdf.errors import EmptyFileError, PdfReadError, PdfStreamError
+from werkzeug.exceptions import RequestEntityTooLarge
 from werkzeug.utils import secure_filename
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-UPLOAD_DIR = os.path.join(BASE_DIR, "uploads")
-OUTPUT_DIR = os.path.join(BASE_DIR, "output")
-MAX_MB = 50
+MAX_MB = int(os.environ.get("MAX_MB", "4"))
 
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = MAX_MB * 1024 * 1024
-
-os.makedirs(UPLOAD_DIR, exist_ok=True)
-os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 TEMPLATE = """\
 <!doctype html>
@@ -345,7 +340,7 @@ TEMPLATE = """\
   <body>
     <div class="page">
       <header>
-        <div class="badge">Local only</div>
+        <div class="badge">Local or hosted</div>
         <h1>PDF Unlocker</h1>
         <p>Upload a password-protected PDF, unlock it with the known password, and download an editable copy.</p>
       </header>
@@ -378,7 +373,7 @@ TEMPLATE = """\
                 <button class="btn primary" id="process-btn" type="submit" disabled><span>Process</span></button>
                 <button class="btn secondary" type="reset" id="reset-btn">Clear</button>
               </div>
-              <p class="note">Files stay on your machine. Unlock only PDFs you own or have rights to edit.</p>
+              <p class="note">Hosted uploads are limited to {{ max_mb }} MB. Run it locally for bigger files. Unlock only PDFs you own or have rights to edit.</p>
             </form>
           </div>
         </div>
@@ -387,9 +382,6 @@ TEMPLATE = """\
         <div class="status {{ status }}">
           <div class="status-title">{{ status_title }}</div>
           <div>{{ message }}</div>
-          {% if download_url %}
-          <a class="btn primary" href="{{ download_url }}">Download unlocked PDF</a>
-          {% endif %}
         </div>
         {% endif %}
       </section>
@@ -420,6 +412,14 @@ TEMPLATE = """\
       form.addEventListener("submit", () => {
         form.classList.add("loading");
         processButton.disabled = true;
+        setTimeout(() => {
+          form.classList.remove("loading");
+          updateState();
+        }, 2500);
+      });
+      window.addEventListener("pageshow", () => {
+        form.classList.remove("loading");
+        updateState();
       });
       updateState();
     </script>
@@ -428,7 +428,7 @@ TEMPLATE = """\
 """
 
 
-def render_page(status=None, message=None, download_url=None):
+def render_page(status=None, message=None):
     status_title = None
     if status == "success":
         status_title = "Unlocked"
@@ -441,8 +441,24 @@ def render_page(status=None, message=None, download_url=None):
         status=status,
         status_title=status_title,
         message=message,
-        download_url=download_url,
+        max_mb=MAX_MB,
     )
+
+
+def unlocked_pdf_buffer(reader):
+    writer = PdfWriter()
+    try:
+        writer.append(reader)
+    except Exception:
+        app.logger.warning("Falling back to page-by-page PDF copy.", exc_info=True)
+        writer = PdfWriter()
+        for page in reader.pages:
+            writer.add_page(page)
+
+    output = io.BytesIO()
+    writer.write(output)
+    output.seek(0)
+    return output
 
 
 @app.route("/", methods=["GET"])
@@ -450,62 +466,55 @@ def index():
     return render_page()
 
 
+@app.errorhandler(RequestEntityTooLarge)
+def handle_file_too_large(error):
+    return (
+        render_page(
+            "error",
+            f"That PDF is larger than the {MAX_MB} MB limit for the hosted version. Run it locally for bigger files.",
+        ),
+        413,
+    )
+
+
 @app.route("/process", methods=["POST"])
 def process():
     upload = request.files.get("pdf")
     if not upload or upload.filename == "":
-        return render_page("error", "Please choose a PDF file to unlock.")
+        return render_page("error", "Please choose a PDF file to unlock."), 400
 
     password = request.form.get("password", "")
-    original_name = secure_filename(upload.filename) or "document.pdf"
-    file_id = uuid.uuid4().hex
-    upload_path = os.path.join(UPLOAD_DIR, f"{file_id}_{original_name}")
-    output_path = os.path.join(OUTPUT_DIR, f"{file_id}.pdf")
-
-    upload.save(upload_path)
+    original_name = secure_filename(upload.filename)
+    base_name = os.path.splitext(original_name)[0] if original_name else ""
+    base_name = secure_filename(base_name) or "document"
 
     try:
-        reader = PdfReader(upload_path)
+        data = upload.read()
+        reader = PdfReader(io.BytesIO(data))
+    except (EmptyFileError, PdfReadError, PdfStreamError):
+        return render_page("error", "That file does not appear to be a valid PDF."), 400
+    except Exception:
+        return render_page("error", "That file does not appear to be a valid PDF."), 400
+
+    try:
         if reader.is_encrypted:
             result = reader.decrypt(password or "")
             if result == 0:
-                return render_page("error", "That password did not unlock this PDF.")
+                return render_page("error", "That password did not unlock this PDF."), 400
 
-        writer = PdfWriter()
-        for page in reader.pages:
-            writer.add_page(page)
-
-        with open(output_path, "wb") as output_file:
-            writer.write(output_file)
-
-        base_name = os.path.splitext(original_name)[0] or "document"
-        download_name = f"{base_name}_unlocked.pdf"
-        download_url = url_for("download", file_id=file_id, name=download_name)
-
-        message = "Password removed. Your unlocked PDF is ready."
-        if not reader.is_encrypted:
-            message = "This PDF was not encrypted. A fresh copy is ready to download."
-
-        return render_page("success", message, download_url)
+        output = unlocked_pdf_buffer(reader)
+        return send_file(
+            output,
+            mimetype="application/pdf",
+            as_attachment=True,
+            download_name=f"{base_name}_unlocked.pdf",
+        )
     except PdfReadError:
-        return render_page("error", "That file does not appear to be a valid PDF.")
+        return render_page("error", "That file does not appear to be a valid PDF."), 400
     except Exception:
-        return render_page("error", "Something went wrong while unlocking the PDF.")
-    finally:
-        try:
-            os.remove(upload_path)
-        except OSError:
-            pass
-
-
-@app.route("/download/<file_id>", methods=["GET"])
-def download(file_id):
-    safe_name = secure_filename(request.args.get("name", "unlocked.pdf")) or "unlocked.pdf"
-    output_path = os.path.join(OUTPUT_DIR, f"{file_id}.pdf")
-    if not os.path.isfile(output_path):
-        return render_page("error", "The unlocked file was not found. Please process again.")
-    return send_file(output_path, as_attachment=True, download_name=safe_name)
+        app.logger.exception("Something went wrong while unlocking the PDF.")
+        return render_page("error", "Something went wrong while unlocking the PDF."), 500
 
 
 if __name__ == "__main__":
-    app.run(host="127.0.0.1", port=5000, debug=True)
+    app.run(host="127.0.0.1", port=int(os.environ.get("PORT", "5000")))
