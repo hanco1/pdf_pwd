@@ -20,7 +20,7 @@ TEMPLATE = """\
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <title>PDF Unlocker</title>
     <link rel="icon" href="data:," />
     <style>
@@ -340,7 +340,7 @@ TEMPLATE = """\
         border-radius: 12px;
         border: 1px solid rgba(31, 122, 140, 0.3);
         font-family: var(--font-body);
-        font-size: 15px;
+        font-size: 16px; /* >=16px stops iOS Safari from auto-zooming on focus */
       }
 
       .password-toggle {
@@ -526,15 +526,25 @@ TEMPLATE = """\
 
       @media (max-width: 600px) {
         .page {
-          padding: 28px 16px 48px;
+          padding: calc(18px + env(safe-area-inset-top)) calc(16px + env(safe-area-inset-right))
+            calc(40px + env(safe-area-inset-bottom)) calc(16px + env(safe-area-inset-left));
+        }
+
+        h1 {
+          font-size: clamp(30px, 9vw, 44px);
         }
 
         .header-top {
-          flex-direction: column;
+          flex-direction: row;
+          align-items: center;
+          justify-content: space-between;
+          flex-wrap: wrap;
+          gap: 10px;
         }
 
         .panel {
-          padding: 20px;
+          padding: 18px;
+          border-radius: 22px;
         }
 
         .panel-grid,
@@ -546,6 +556,43 @@ TEMPLATE = """\
           flex-direction: column;
           align-items: flex-start;
         }
+
+        .actions {
+          flex-direction: column;
+          align-items: stretch;
+        }
+
+        .actions .btn {
+          width: 100%;
+        }
+      }
+
+      /* Touch devices — iPhone, iPad, Android (works even when iPad sends a desktop UA) */
+      @media (pointer: coarse) {
+        .lang-button,
+        .password-toggle,
+        .file-button,
+        .clear-file,
+        .mode-tab,
+        .btn {
+          min-height: 44px;
+        }
+
+        .password-toggle {
+          width: 44px;
+        }
+
+        .btn:hover:not(:disabled),
+        .file-button:hover,
+        .mode-tab:hover {
+          transform: none;
+        }
+      }
+
+      /* Server-detected mobile (iPhone/Android UA): drop the heavy decorative blobs */
+      body.is-mobile .page::before,
+      body.is-mobile .page::after {
+        display: none;
       }
 
       @media (prefers-reduced-motion: reduce) {
@@ -556,7 +603,7 @@ TEMPLATE = """\
       }
     </style>
       </head>
-  <body>
+  <body class="{{ 'is-mobile' if is_mobile else '' }}">
     <div class="page">
       <header>
         <div class="header-top">
@@ -1015,6 +1062,11 @@ def normalize_mode(mode):
 
 def render_page(status=None, message=None, mode="unlock"):
     mode = normalize_mode(mode)
+    try:
+        ua = (request.user_agent.string or "").lower()
+    except Exception:
+        ua = ""
+    is_mobile = any(token in ua for token in ("iphone", "ipad", "ipod", "android", "mobile"))
     status_title = None
     if status == "success":
         status_title = "Protected" if mode == "lock" else "Unlocked"
@@ -1030,6 +1082,7 @@ def render_page(status=None, message=None, mode="unlock"):
         max_mb=MAX_MB,
         initial_mode=mode,
         is_hosted=IS_HOSTED,
+        is_mobile=is_mobile,
     )
 
 
